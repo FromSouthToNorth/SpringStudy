@@ -2,6 +2,7 @@ package org.springframework.util;
 
 import org.springframework.lang.Nullable;
 
+import java.lang.reflect.Array;
 import java.util.Arrays;
 
 /**
@@ -34,6 +35,41 @@ public abstract class ObjectUtils {
     private static final String EMPTY_ARRAY = ARRAY_START + ARRAY_END;
     private static final String ARRAY_ELEMENT_SEPARATOR = ", ";
     private static final Object[] EMPTY_OBJECT_ARRAY = new Object[0];
+
+    /**
+     * Convert the given array (which may be a primitive array) to an
+     * object array (if necessary of primitive wrapper objects).
+     * <p>A {@code null} source value will be converted to an
+     * empty Object array.
+     * @param source the (potentially primitive) array
+     * @return the corresponding object array (never {@code null})
+     * @throws IllegalArgumentException if the parameter is not an array
+     */
+    public static Object[] toObjectArray(@Nullable Object source) {
+        if (source instanceof Object[]) {
+            return (Object[]) source;
+        }
+        if (source == null) {
+            return EMPTY_OBJECT_ARRAY;
+        }
+        if (!source.getClass().isArray()) {
+            throw new IllegalArgumentException("Source is not an array: " + source);
+        }
+        int length = Array.getLength(source);
+        if (length == 0) {
+            return EMPTY_OBJECT_ARRAY;
+        }
+        Class<?> wrapperType = Array.get(source, 0).getClass();
+        Object[] newArray = (Object[]) Array.newInstance(wrapperType, length);
+        for (int i = 0; i < length; i++) {
+            newArray[i] = Array.get(source, i);
+        }
+        return newArray;
+    }
+
+    //---------------------------------------------------------------------
+    // Convenience methods for content-based equality/hash-code handling
+    //---------------------------------------------------------------------
 
     public static boolean nullSafeEquals(@Nullable Object o1, @Nullable Object o2) {
         if (o1 == o2) {

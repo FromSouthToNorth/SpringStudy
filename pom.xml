@@ -23,6 +23,7 @@
         <slf4j-api.version>1.7.30</slf4j-api.version>
         <log4j-api.version>2.14.1</log4j-api.version>
         <jsr305.version>3.0.2</jsr305.version>
+        <kotlin.version>1.5.10</kotlin.version>
     </properties>
 
     <dependencyManagement>
@@ -46,6 +47,20 @@
                 <artifactId>jsr305</artifactId>
                 <version>${jsr305.version}</version>
             </dependency>
+
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-stdlib</artifactId>
+                <version>${kotlin.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.jetbrains.kotlin/kotlin-reflect -->
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-reflect</artifactId>
+                <version>${kotlin.version}</version>
+            </dependency>
+
 
             <dependency>
                 <groupId>org.springframework</groupId>
