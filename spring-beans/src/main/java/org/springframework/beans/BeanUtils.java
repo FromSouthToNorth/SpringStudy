@@ -17,6 +17,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.ReflectionUtils;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -185,7 +186,81 @@ public abstract class BeanUtils {
             throw new BeanInstantiationException(ctor, "Illegal arguments for constructor", ex);
         }
         catch (InvocationTargetException ex) {
-            throw new BeanInstantiationException(ctor, "Constructor threw exception", ex);
+            throw new BeanInstantiationException(ctor, "Constructor threw exception", ex.getTargetException());
+        }
+    }
+
+    /**
+     * Return a resolvable constructor for the provided class, either a primary constructor
+     * or single public constructor or simply a default constructor. Callers have to be
+     * prepared to resolve arguments for the returned constructor's parameters, if any.
+     * @param clazz the class to check
+     * @since 5.3
+     * @see #findPrimaryConstructor
+     */
+    @SuppressWarnings("unchecked")
+    public static <T> Constructor<T> getResolvableConstructor(Class<T> clazz) {
+        Constructor<T> ctor = findPrimaryConstructor(clazz);
+        if (ctor == null) {
+            Constructor<?>[] ctors = clazz.getConstructors();
+            if (ctors.length == 1) {
+                ctor = (Constructor<T>) ctors[0];
+            }
+            else {
+                try {
+                    ctor = clazz.getDeclaredConstructor();
+                }
+                catch (NoSuchMethodException ex) {
+                    throw new IllegalStateException("No primary or single public constructor found for " +
+                            clazz + " - and no default constructor found either");
+                }
+            }
+        }
+        return ctor;
+    }
+
+    /**
+     * Find a method with the given method name and the given parameter types,
+     * declared on the given class or one of its superclasses. Prefers public methods,
+     * but will return a protected, package access, or private method too.
+     * <p>Checks {@code Class.getMethod} first, falling back to
+     * {@code findDeclaredMethod}. This allows to find public methods
+     * without issues even in environments with restricted Java security settings.
+     * @param clazz the class to check
+     * @param methodName the name of the method to find
+     * @param paramTypes the parameter types of the method to find
+     */
+    @Nullable
+    public static Method findMethod(Class<?> clazz, String methodName, Class<?>... paramTypes) {
+        try {
+            return clazz.getMethod(methodName, paramTypes);
+        }
+        catch (NoSuchMethodException ex) {
+            return findDeclaredMethod(clazz, methodName, paramTypes);
+        }
+    }
+
+    /**
+     * Find a method with the given method name and the given parameter types,
+     * declared on the given class or one of its superclasses. Will return a public,
+     * protected, package access, or private method.
+     * <p>Checks {@code Class.getDeclaredMethod}, cascading upwards to all superclasses.
+     * @param clazz the class to check
+     * @param methodName the name of the method to find
+     * @param paramTypes the parameter types of the method to find
+     * @return the Method object, or {@code null} if not found
+     * @see Class#getDeclaredMethod
+     */
+    @Nullable
+    public static Method findDeclaredMethod(Class<?> clazz, String methodName, Class<?>... paramTypes) {
+        try {
+            return clazz.getDeclaredMethod(methodName, paramTypes);
+        }
+        catch (NoSuchMethodException ex) {
+            if (clazz.getSuperclass() != null) {
+                return findDeclaredMethod(clazz.getSuperclass(), methodName, paramTypes);
+            }
+            return null;
         }
     }
 

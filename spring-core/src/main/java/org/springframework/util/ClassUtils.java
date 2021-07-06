@@ -286,4 +286,29 @@ public abstract class ClassUtils {
         }
     }
 
+    /**
+     * Check if the right-hand side type may be assigned to the left-hand side
+     * type, assuming setting by reflection. Considers primitive wrapper
+     * classes as assignable to the corresponding primitive types.
+     * @param lhsType the target type
+     * @param rhsType the value type that should be assigned to the target type
+     * @return if the target type is assignable from the value type
+     * @see TypeUtils#isAssignable(java.lang.reflect.Type, java.lang.reflect.Type)
+     */
+    public static boolean isAssignable(Class<?> lhsType, Class<?> rhsType) {
+        Assert.notNull(lhsType, "Left-hand side type must not be null");
+        Assert.notNull(rhsType, "Right-hand side type must not be null");
+        if (lhsType.isAssignableFrom(rhsType)) {
+            return true;
+        }
+        if (lhsType.isPrimitive()) {
+            Class<?> resolvedPrimitive = primitiveTypeNameMap.get(rhsType);
+            return (lhsType == resolvedPrimitive);
+        }
+        else {
+            Class<?> resolvedWrapper = primitiveTypeNameMap.get(rhsType);
+            return (resolvedWrapper != null && lhsType.isAssignableFrom(resolvedWrapper));
+        }
+    }
+
 }

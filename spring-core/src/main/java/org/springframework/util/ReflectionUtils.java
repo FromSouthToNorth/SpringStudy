@@ -1,6 +1,11 @@
 package org.springframework.util;
 
+import org.springframework.lang.Nullable;
+
 import java.lang.reflect.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -173,6 +178,54 @@ public abstract class ReflectionUtils {
         }
     }
 
+    // Method handling
+
+    /**
+     * Attempt to find a {@link Method} on the supplied class with the supplied name
+     * and no parameters. Searches all superclasses up to {@code Object}.
+     * <p>Returns {@code null} if no {@link Method} can be found.
+     * @param clazz the class to introspect
+     * @param name the name of the method
+     * @return the Method object, or {@code null} if none found
+     */
+    @Nullable
+    public static Method findMethod(Class<?> clazz, String name) {
+        return findMethod(clazz, name, EMPTY_CLASS_ARRAY);
+    }
+
+    /**
+     * Attempt to find a {@link Method} on the supplied class with the supplied name
+     * and parameter types. Searches all superclasses up to {@code Object}.
+     * <p>Returns {@code null} if no {@link Method} can be found.
+     * @param clazz the class to introspect
+     * @param name the name of the method
+     * @param paramTypes the parameter types of the method
+     * (may be {@code null} to indicate any signature)
+     * @return the Method object, or {@code null} if none found
+     */
+    @Nullable
+    public static Method findMethod(Class<?> clazz, String name, @Nullable Class<?>... paramTypes) {
+        Assert.notNull(clazz, "Class must not be null");
+        Assert.notNull(name, "Method name must not be null");
+        Class<?> searchType = clazz;
+        while (searchType != null) {
+            Method[] methods = (searchType.isInterface() ? searchType.getMethods() :
+                    getDeclaredMethods(searchType, false));
+            for (Method method : methods) {
+                if (name.equals(method.getName()) && (paramTypes == null || hasSameParams(method, paramTypes))) {
+                    return method;
+                }
+            }
+            searchType = searchType.getSuperclass();
+        }
+        return null;
+    }
+
+    private static boolean hasSameParams(Method method, Class<?>[] paramTypes) {
+        return (paramTypes.length == method.getParameterCount() &&
+                Arrays.equals(paramTypes, method.getParameterTypes()));
+    }
+
     /**
      * Callback optionally used to filter methods to be operated on by a method callback.
      */
@@ -236,6 +289,119 @@ public abstract class ReflectionUtils {
             Assert.notNull(next, "Next FieldFilter must not be null");
             return field -> matches(field) && next.matches(field);
         }
+    }
+
+    /**
+     * Invoke the specified {@link Method} against the supplied target object with no arguments.
+     * The target object can be {@code null} when invoking a static {@link Method}.
+     * <p>Thrown exceptions are handled via a call to {@link #handleReflectionException}.
+     * @param method the method to invoke
+     * @param target the target object to invoke the method on
+     * @return the invocation result, if any
+     * @see #invokeMethod(java.lang.reflect.Method, Object, Object[])
+     */
+    @Nullable
+    public static Object invokeMethod(Method method, @Nullable Object target) {
+        return invokeMethod(method, target, EMPTY_OBJECT_ARRAY);
+    }
+
+    /**
+     * Invoke the specified {@link Method} against the supplied target object with the
+     * supplied arguments. The target object can be {@code null} when invoking a
+     * static {@link Method}.
+     * <p>Thrown exceptions are handled via a call to {@link #handleReflectionException}.
+     * @param method the method to invoke
+     * @param target the target object to invoke the method on
+     * @param args the invocation arguments (may be {@code null})
+     * @return the invocation result, if any
+     */
+    @Nullable
+    public static Object invokeMethod(Method method, @Nullable Object target, @Nullable Object... args) {
+        try {
+            return method.invoke(target, args);
+        }
+        catch (Exception ex) {
+            handleReflectionException(ex);
+        }
+        throw new IllegalStateException("Should never get here");
+    }
+
+    /**
+     * Variant of {@link Class#getDeclaredMethods()} that uses a local cache in
+     * order to avoid the JVM's SecurityManager check and new Method instances.
+     * In addition, it also includes Java 8 default methods from locally
+     * implemented interfaces, since those are effectively to be treated just
+     * like declared methods.
+     * @param clazz the class to introspect
+     * @return the cached array of methods
+     * @throws IllegalStateException if introspection fails
+     * @since 5.2
+     * @see Class#getDeclaredMethods()
+     */
+    public static Method[] getDeclaredMethods(Class<?> clazz) {
+        return getDeclaredMethods(clazz, true);
+    }
+
+    public static Method[] getDeclaredMethods(Class<?> clazz, boolean defensive) {
+        Assert.notNull(clazz, "Class must not be null");
+        Method[] result = declaredMethodsCache.get(clazz);
+        if (result == null) {
+            try {
+                Method[] declaredMethods = clazz.getDeclaredMethods();
+                List<Method> defaultMethods = findConcreteMethodsOnInferFaces(clazz);
+                if (defaultMethods != null) {
+                    result = new Method[declaredMethods.length + defaultMethods.size()];
+                    System.arraycopy(declaredMethods, 0 , result, 0, declaredMethods.length);
+                    int index = declaredMethods.length;
+                    for (Method defaultMethod : defaultMethods) {
+                        result[index] = defaultMethod;
+                        index++;
+                    }
+                }
+                else {
+                    result = declaredMethods;
+                }
+                declaredMethodsCache.put(clazz, (result.length == 0 ? EMPTY_METHOD_ARRAY : result));
+            }
+            catch (Throwable ex) {
+                throw new IllegalStateException("Failed to introspect Class [" + clazz.getName() +
+                        "] from ClassLoader [" + clazz.getClassLoader() + "]", ex);
+            }
+        }
+        return (result.length == 0 || !defensive) ? result : result.clone();
+    }
+
+    @Nullable
+    public static List<Method> findConcreteMethodsOnInferFaces(Class<?> clazz) {
+        List<Method> result = null;
+        for (Class<?> ifc : clazz.getInterfaces()) {
+            for (Method ifcMethod : ifc.getMethods()) {
+                if (!Modifier.isAbstract(ifcMethod.getModifiers())) {
+                    if (result == null) {
+                        result = new ArrayList<>();
+                    }
+                    result.add(ifcMethod);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Determine whether the given method is a CGLIB 'renamed' method,
+     * following the pattern "CGLIB$methodName$0".
+     * @param renamedMethod the method to check
+     */
+    public static boolean isCglibRenamedMethod(Method renamedMethod) {
+        String name = renamedMethod.getName();
+        if (name.startsWith(CGLIB_RENAMED_METHOD_PREFIX)) {
+            int i = name.length() - 1;
+            while (i >= 0 && Character.isDigit(name.charAt(i))) {
+                i--;
+            }
+            return (i > CGLIB_RENAMED_METHOD_PREFIX.length() && (i < name.length() - 1) && name.charAt(i) == '$');
+        }
+        return false;
     }
 
 }
