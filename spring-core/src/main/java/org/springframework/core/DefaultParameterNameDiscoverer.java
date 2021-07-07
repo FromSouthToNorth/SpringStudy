@@ -21,5 +21,15 @@ package org.springframework.core;
  * @see LocalVariableTableParameterNameDiscoverer
  * @see KotlinReflectionParameterNameDiscoverer
  */
-public class DefaultParameterNameDiscoverer implements ParameterNameDiscoverer {
+public class DefaultParameterNameDiscoverer extends PrioritizedParameterNameDiscoverer {
+
+    public DefaultParameterNameDiscoverer() {
+        // TODO Remove this conditional inclusion when upgrading to Kotlin 1.5, see https://youtrack.jetbrains.com/issue/KT-44594
+        if (KotlinDetector.isKotlinReflectPresent() && !NativeDetector.inNativeImage()) {
+            addDiscoverer(new KotlinReflectionParameterNameDiscoverer());
+        }
+        addDiscoverer(new StandardReflectionParameterNameDiscoverer());
+        addDiscoverer(new LocalVariableTableParameterNameDiscoverer());
+    }
+
 }

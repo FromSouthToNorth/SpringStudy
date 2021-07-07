@@ -6,6 +6,7 @@ import java.io.Externalizable;
 import java.io.Serializable;
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.*;
 
 /**
@@ -309,6 +310,17 @@ public abstract class ClassUtils {
             Class<?> resolvedWrapper = primitiveTypeNameMap.get(rhsType);
             return (resolvedWrapper != null && lhsType.isAssignableFrom(resolvedWrapper));
         }
+    }
+
+    /**
+     * Determine if the supplied class is an <em>inner class</em>,
+     * i.e. a non-static member of an enclosing class.
+     * @return {@code true} if the supplied class is an inner class
+     * @since 5.0.5
+     * @see Class#isMemberClass()
+     */
+    public static boolean isInnerClass(Class<?> clazz) {
+        return (clazz.isMemberClass() && !Modifier.isStatic(clazz.getModifiers()));
     }
 
 }

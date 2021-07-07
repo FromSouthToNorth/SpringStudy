@@ -2,6 +2,10 @@ package org.springframework.util;
 
 import org.springframework.lang.Nullable;
 
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.StringJoiner;
+
 /**
  * Miscellaneous {@link String} utility methods.
  *
@@ -300,5 +304,86 @@ public class StringUtils {
             endIdx --;
         }
         return str.substring(0, endIdx + 1);
+    }
+
+    /**
+     * Convert a {@code String} array into a delimited {@code String} (e.g. CSV).
+     * <p>Useful for {@code toString()} implementations.
+     * @param arr the array to display (potentially {@code null} or empty)
+     * @param delim the delimiter to use (typically a ",")
+     * @return the delimited {@code String}
+     */
+    public static String arrayToDelimitedString(@Nullable Object[] arr, String delim) {
+        if (ObjectUtils.isEmpty(arr)) {
+            return "";
+        }
+        if (arr.length == 1) {
+            return ObjectUtils.nullSafeToString(arr[0]);
+        }
+        StringJoiner sj = new StringJoiner(delim);
+        for (Object elem : arr) {
+            sj.add(String.valueOf(elem));
+        }
+        return sj.toString();
+    }
+
+    /**
+     * Convert a {@code String} array into a comma delimited {@code String}
+     * (i.e., CSV).
+     * <p>Useful for {@code toString()} implementations.
+     * @param arr the array to display (potentially {@code null} or empty)
+     * @return the delimited {@code String}
+     */
+    public static String arrayToDelimitedString(@Nullable Object[] arr) {
+        return arrayToDelimitedString(arr, ",");
+    }
+
+
+    /**
+     * Convert a {@link Collection} to a delimited {@code String} (e.g. CSV).
+     * <p>Useful for {@code toString()} implementations.
+     * @param coll the {@code Collection} to convert (potentially {@code null} or empty)
+     * @param delim the delimiter to use (typically a ",")
+     * @param prefix the {@code String} to start each element with
+     * @param suffix the {@code String} to end each element with
+     * @return the delimited {@code String}
+     */
+    public static String collectionToDelimitedString(
+            @Nullable Collection<?> coll, String delim, String prefix, String suffix) {
+
+        if (CollectionUtils.isEmpty(coll)) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        Iterator<?> it = coll.iterator();
+        while (it.hasNext()) {
+            sb.append(prefix).append(it.next()).append(suffix);
+            if (it.hasNext()) {
+                sb.append(delim);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Convert a {@code Collection} into a delimited {@code String} (e.g. CSV).
+     * <p>Useful for {@code toString()} implementations.
+     * @param coll the {@code Collection} to convert (potentially {@code null} or empty)
+     * @param delim the delimiter to use (typically a ",")
+     * @return the delimited {@code String}
+     */
+    public static String collectionToDelimitedString(@Nullable Collection<?> coll, String delim) {
+        return collectionToDelimitedString(coll, delim, "", "");
+    }
+
+    /**
+     * Convert a {@code Collection} into a delimited {@code String} (e.g., CSV).
+     * <p>Useful for {@code toString()} implementations.
+     * @param coll the {@code Collection} to convert (potentially {@code null} or empty)
+     * @return the delimited {@code String}
+     */
+    public static String collectionToCommaDelimitedString(@Nullable Collection<?> coll) {
+        return collectionToDelimitedString(coll, ",");
     }
 }

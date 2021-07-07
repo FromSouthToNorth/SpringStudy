@@ -220,6 +220,36 @@ final class SerializableTypeWrapper {
     }
 
     /**
+     * {@link TypeProvider} for {@link Type Types} obtained from a {@link MethodParameter}.
+     */
+    @SuppressWarnings("serial")
+    static class MethodParameterTypeProvider implements TypeProvider {
+
+        private final String methodName;
+
+        private final Class<?>[] parameterTypes;
+
+        private final Class<?> declaringClass;
+
+        private final int parameterIndex;
+
+        private transient MethodParameter methodParameter;
+
+        public MethodParameterTypeProvider(MethodParameter methodParameter) {
+            this.methodName = (methodParameter.getMethod() != null ? methodParameter.getMethod().getName() : null);
+            this.parameterTypes = methodParameter.getExecutable().getParameterTypes();
+            this.declaringClass = methodParameter.getDeclaringClass();
+            this.parameterIndex = methodParameter.getParameterIndex();
+            this.methodParameter = methodParameter;
+        }
+
+        @Override
+        public Type getType() {
+            return this.methodParameter.getGenericParameterType();
+        }
+    }
+
+    /**
      * {@link TypeProvider} for {@link Type Types} obtained by invoking a no-arg method.
      */
     @SuppressWarnings("serial")
