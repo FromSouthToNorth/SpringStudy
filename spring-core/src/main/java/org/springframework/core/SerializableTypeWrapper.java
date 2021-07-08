@@ -49,6 +49,15 @@ final class SerializableTypeWrapper {
     }
 
     /**
+     * Return a {@link Serializable} variant of
+     * {@link MethodParameter#getGenericParameterType()}.
+     */
+    @Nullable
+    public static Type forMethodParameter(MethodParameter methodParameter) {
+        return forTypeProvider(new MethodParameterTypeProvider(methodParameter));
+    }
+
+    /**
      * Unwrap the given type, effectively returning the original non-serializable type.
      * @param type the type to unwrap
      * @return the original non-serializable type
