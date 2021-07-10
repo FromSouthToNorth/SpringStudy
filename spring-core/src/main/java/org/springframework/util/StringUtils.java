@@ -1,10 +1,26 @@
 package org.springframework.util;
 
-import org.springframework.lang.Nullable;
-
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.Charset;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Deque;
+import java.util.Enumeration;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Properties;
+import java.util.Set;
 import java.util.StringJoiner;
+import java.util.StringTokenizer;
+import java.util.TimeZone;
+
+import com.sun.org.apache.bcel.internal.generic.IF_ACMPEQ;
+import org.springframework.lang.Nullable;
 
 /**
  * Miscellaneous {@link String} utility methods.
@@ -306,6 +322,515 @@ public class StringUtils {
         return str.substring(0, endIdx + 1);
     }
 
+    /**
+     * Test if the given {@code String} matches the given single character.
+     * @param str the {@code String} to check
+     * @param singleCharacter the character to compare to
+     * @since 5.2.9
+     */
+    public static boolean matchesCharacter(@Nullable String str, char singleCharacter) {
+        return (str != null && str.length() == 1 && str.charAt(0) == singleCharacter);
+    }
+
+    /**
+     * Test if the given {@code String} starts with the specified prefix,
+     * ignoring upper/lower case.
+     * @param str the {@code String} to check
+     * @param prefix the prefix to look for
+     * @see java.lang.String#startsWith
+     */
+    public static boolean startsWithIgnoreCase(@Nullable String str, @Nullable String prefix) {
+        return (str != null && prefix != null && str.length() >= prefix.length() &&
+                str.regionMatches(true, 0 , prefix, 0, prefix.length()));
+    }
+
+    /**
+     * Test if the given {@code String} ends with the specified suffix,
+     * ignoring upper/lower case.
+     * @param str the {@code String} to check
+     * @param suffix the suffix to look for
+     * @see java.lang.String#endsWith
+     */
+    public static boolean endsWithIgnoreCase(@Nullable String str, @Nullable String suffix) {
+        return (str != null && suffix != null && str.length() >= suffix.length() &&
+                str.regionMatches(true, str.length() - suffix.length(), suffix, 0, suffix.length()));
+    }
+
+    /**
+     * Test whether the given string matches the given substring
+     * at the given index.
+     * @param str the original string (or StringBuilder)
+     * @param index the index in the original string to start matching against
+     * @param substring the substring to match at the given index
+     */
+    public static boolean substringMatch(CharSequence str, int index, CharSequence substring) {
+        if (index + substring.length() > str.length()) {
+            return false;
+        }
+        for (int i = 0; i < substring.length(); i++) {
+            if (str.charAt(index + i) != substring.charAt(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Count the occurrences of the substring {@code sub} in string {@code str}.
+     * @param str string to search in
+     * @param sub string to search for
+     */
+    public static int countOccurrencesOf(String str, String sub) {
+        if (!hasLength(str) || !hasLength(sub)) {
+            return 0;
+        }
+
+        int count = 0;
+        int pos = 0;
+        int idx;
+        while ((idx = str.indexOf(sub, pos)) != -1) {
+            ++count;
+            pos = idx + sub.length();
+        }
+        return count;
+    }
+
+    /**
+     * Replace all occurrences of a substring within a string with another string.
+     * @param inString {@code String} to examine
+     * @param oldPattern {@code String} to replace
+     * @param newPattern {@code String} to insert
+     * @return a {@code String} with the replacements
+     */
+    public static String replace(String inString, String oldPattern, @Nullable String newPattern) {
+        if ((!hasLength(inString) || !hasLength(oldPattern) || newPattern == null)) {
+            return inString;
+        }
+        int index = inString.indexOf(oldPattern);
+        if (index == -1) {
+            // no occurrence -> can return input as-is
+            return inString;
+        }
+
+        int capacity = inString.length();
+        if (newPattern.length() > oldPattern.length()) {
+            capacity += 16;
+        }
+        StringBuilder sb = new StringBuilder(capacity);
+
+        int pos = 0;  // our position in the old string
+        int patLen = oldPattern.length();
+        while (index >= 0) {
+            sb.append(inString, pos, index);
+            sb.append(newPattern);
+            pos = index + patLen;
+            index = inString.indexOf(oldPattern, pos);
+        }
+
+        // append any characters to the right of a match
+        sb.append(inString, pos, inString.length());
+        return sb.toString();
+    }
+
+    /**
+     * Delete all occurrences of the given substring.
+     * @param inString the original {@code String}
+     * @param pattern the pattern to delete all occurrences of
+     * @return the resulting {@code String}
+     */
+    public static String delete(String inString, String pattern) {
+        return replace(inString, pattern, "");
+    }
+
+    /**
+     * Delete any character in a given {@code String}.
+     * @param inString the original {@code String}
+     * @param charsToDelete a set of characters to delete.
+     * E.g. "az\n" will delete 'a's, 'z's and new lines.
+     * @return the resulting {@code String}
+     */
+    public static String deleteAny(String inString, @Nullable String charsToDelete) {
+        if (!hasLength(inString) || !hasLength(charsToDelete)) {
+            return inString;
+        }
+        
+        int lastCharIndex = 0;
+        char[] result = new char[inString.length()];
+        for (int i = 0; i < inString.length(); i++) {
+            char c = inString.charAt(i);
+            if (charsToDelete.indexOf(c) == -1) {
+                result[lastCharIndex++] = c;
+            }
+        }
+        if (lastCharIndex == inString.length()) {
+            return inString;
+        }
+        return new String(result, 0, lastCharIndex);
+    }
+
+    //---------------------------------------------------------------------
+    // Convenience methods for working with formatted Strings
+    //---------------------------------------------------------------------
+
+    /**
+     * Quote the given {@code String} with single quotes.
+     * @param str the input {@code String} (e.g. "myString")
+     * @return the quoted {@code String} (e.g. "'myString'"),
+     * or {@code null} if the input was {@code null}
+     */
+    @Nullable
+    public static String quote(@Nullable String str) {
+        return (str != null ? "'" + str + "'" : null);
+    }
+
+    /**
+     * Turn the given Object into a {@code String} with single quotes
+     * if it is a {@code String}; keeping the Object as-is else.
+     * @param obj the input Object (e.g. "myString")
+     * @return the quoted {@code String} (e.g. "'myString'"),
+     * or the input object as-is if not a {@code String}
+     */
+    @Nullable
+    public static Object quoteIfString(@Nullable Object obj) {
+        return (obj instanceof String ? quote((String) obj) : obj);
+    }
+
+    /**
+     * Unqualify a string qualified by a '.' dot character. For example,
+     * "this.name.is.qualified", returns "qualified".
+     * @param qualifiedName the qualified name
+     */
+    public static String unqualify(String qualifiedName) {
+        return unqualify(qualifiedName, '.');
+    }
+
+    /**
+     * Unqualify a string qualified by a separator character. For example,
+     * "this:name:is:qualified" returns "qualified" if using a ':' separator.
+     * @param qualifiedName the qualified name
+     * @param separator the separator
+     */
+    public static String unqualify(String qualifiedName, char separator) {
+        return qualifiedName.substring(qualifiedName.lastIndexOf(separator) + 1);
+    }
+
+    /**
+     * Capitalize a {@code String}, changing the first letter to
+     * upper case as per {@link Character#toUpperCase(char)}.
+     * No other letters are changed.
+     * @param str the {@code String} to capitalize
+     * @return the capitalized {@code String}
+     */
+    public static String capitalize(String str) {
+        return changeFirstCharacterCase(str, true);
+    }
+
+    /**
+     * Uncapitalize a {@code String}, changing the first letter to
+     * lower case as per {@link Character#toLowerCase(char)}.
+     * No other letters are changed.
+     * @param str the {@code String} to uncapitalize
+     * @return the uncapitalized {@code String}
+     */
+    public static String uncapitalize(String str) {
+        return changeFirstCharacterCase(str, false);
+    }
+
+    public static String changeFirstCharacterCase(String str, boolean capitalize) {
+        if (!hasLength(str)) {
+            return str;
+        }
+
+        char baseChar = str.charAt(0);
+        char updatedChar;
+        if (capitalize) {
+            updatedChar = Character.toUpperCase(baseChar);
+        }
+        else {
+            updatedChar = Character.toLowerCase(baseChar);
+        }
+        if (baseChar == updatedChar) {
+            return str;
+        }
+
+        char[] chars = str.toCharArray();
+        chars[0] = updatedChar;
+        return new String(chars, 0, chars.length);
+    }
+
+    /**
+     * Extract the filename from the given Java resource path,
+     * e.g. {@code "mypath/myfile.txt" -> "myfile.txt"}.
+     * @param path the file path (may be {@code null})
+     * @return the extracted filename, or {@code null} if none
+     */
+    @Nullable
+    public static String getFilename(@Nullable String path) {
+        if (path == null) {
+            return null;
+        }
+
+        int separatorIndex = path.indexOf(FOLDER_SEPARATOR);
+        return (separatorIndex != -1 ? path.substring(separatorIndex + 1) : path);
+    }
+
+    /**
+     * Extract the filename extension from the given Java resource path,
+     * e.g. "mypath/myfile.txt" -> "txt".
+     * @param path the file path (may be {@code null})
+     * @return the extracted filename extension, or {@code null} if none
+     */
+    @Nullable
+    public static String getFilenameExtension(@Nullable String path) {
+        if (path == null) {
+            return null;
+        }
+
+        int extIndex = path.indexOf(EXTENSION_SEPARATOR);
+        if (extIndex == -1) {
+            return null;
+        }
+
+        int folderIndex = path.lastIndexOf(FOLDER_SEPARATOR);
+        if (folderIndex > extIndex) {
+            return null;
+        }
+
+        return path.substring(extIndex + 1);
+    }
+
+    /**
+     * Strip the filename extension from the given Java resource path,
+     * e.g. "mypath/myfile.txt" -> "mypath/myfile".
+     * @param path the file path
+     * @return the path with stripped filename extension
+     */
+    public static String stripFilenameExtension(String path) {
+        int extIndex = path.lastIndexOf(FOLDER_SEPARATOR);
+        if (extIndex == -1) {
+            return null;
+        }
+
+        int folderIndex = path.lastIndexOf(EXTENSION_SEPARATOR);
+        if (folderIndex > extIndex) {
+            return null;
+        }
+
+        return path.substring(0, extIndex);
+    }
+
+    /**
+     * Apply the given relative path to the given Java resource path,
+     * assuming standard Java folder separation (i.e. "/" separators).
+     * @param path the path to start from (usually a full file path)
+     * @param relativePath the relative path to apply
+     * (relative to the full file path above)
+     * @return the full file path that results from applying the relative path
+     */
+    public static String applyRelativePath(String path, String relativePath) {
+        int separatorIndex = path.lastIndexOf(FOLDER_SEPARATOR);
+        if (separatorIndex != -1) {
+            String newPath = path.substring(0, separatorIndex);
+            if (!relativePath.startsWith(FOLDER_SEPARATOR)) {
+                newPath += FOLDER_SEPARATOR;
+            }
+            return newPath + relativePath;
+        }
+        else {
+            return relativePath;
+        }
+    }
+
+    /**
+     * Normalize the path by suppressing sequences like "path/.." and
+     * inner simple dots.
+     * <p>The result is convenient for path comparison. For other uses,
+     * notice that Windows separators ("\") are replaced by simple slashes.
+     * <p><strong>NOTE</strong> that {@code cleanPath} should not be depended
+     * upon in a security context. Other mechanisms should be used to prevent
+     * path-traversal issues.
+     * @param path the original path
+     * @return the normalized path
+     */
+    public static String cleanPath(String path) {
+        if (!hasLength(path)) {
+            return path;
+        }
+
+        String pathToUse = replace(path, WINDOWS_FOLDER_SEPARATOR, FOLDER_SEPARATOR);
+
+        // Shortcut if there is no work to do
+        if (pathToUse.indexOf('.') == -1) {
+            return pathToUse;
+        }
+
+        // Strip prefix from path to analyze, to not treat it as part of the
+        // first path element. This is necessary to correctly parse paths like
+        // "file:core/../core/io/Resource.class", where the ".." should just
+        // strip the first "core" directory while keeping the "file:" prefix.
+        int prefixIndex = pathToUse.indexOf(':');
+        String prefix = "";
+        if (prefixIndex != -1) {
+            prefix = pathToUse.substring(0, prefixIndex + 1);
+            if (prefix.contains(FOLDER_SEPARATOR)) {
+                prefix = "";
+            }
+            else {
+                pathToUse = pathToUse.substring(prefixIndex + 1);
+            }
+        }
+        if (pathToUse.startsWith(FOLDER_SEPARATOR)) {
+            prefix = prefix + FOLDER_SEPARATOR;
+            pathToUse = pathToUse.substring(1);
+        }
+
+        String[] pathArray = delimitedListToStringArray(pathToUse, FOLDER_SEPARATOR);
+        Deque<String> pathElements = new ArrayDeque<>();
+        int tops = 0;
+
+        for (int i = pathArray.length - 1; i >= 0; i--) {
+            String element = pathArray[i];
+            if (CURRENT_PATH.equals(element)) {
+                // Points to current directory - drop it.
+            }
+            else if(TOP_PATH.equals(element)) {
+                // Registering top path found.
+                tops++;
+            }
+            else {
+                if (tops > 0) {
+                    // Merging path element with element corresponding to top path.
+                    tops--;
+                }
+                else {
+                    // Normal path element found.
+                    pathElements.addFirst(element);
+                }
+            }
+        }
+
+        // All path element stayed the same - shortcut
+        if (pathArray.length == pathElements.size()) {
+            return prefix + pathToUse;
+        }
+        // Remaining top paths need to be retained.
+        for (int i = 0; i < tops; i++) {
+            pathElements.addFirst(TOP_PATH);
+        }
+        // If ooting else left, at least explicitly point to current path.
+        if (pathElements.size() == 1 && pathElements.getLast().isEmpty() && !prefix.endsWith(FOLDER_SEPARATOR)) {
+            pathElements.addFirst(CURRENT_PATH);
+        }
+
+        return prefix + collectionToDelimitedString(pathElements, FOLDER_SEPARATOR);
+    }
+
+    /**
+     * Compare two paths after normalization of them.
+     * @param path1 first path for comparison
+     * @param path2 second path for comparison
+     * @return whether the two paths are equivalent after normalization
+     */
+    public static boolean pathEquals(String path1, String path2) {
+        return cleanPath(path1).equals(cleanPath(path2));
+    }
+
+    public static String uriDecode(String source, Charset charset) {
+        int length = source.length();
+        if (length == 0) {
+            return source;
+        }
+        Assert.notNull(charset, "Character must not be null");
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream(length);
+        boolean changed = false;
+        for (int i = 0; i < length; i++) {
+            int ch = source.charAt(i);
+            if (ch == '%') {
+                if (i + 2 < length) {
+                    char hex1 = source.charAt(i + 1);
+                    char hex2 = source.charAt(i + 2);
+                    int u = Character.digit(hex1, 16);
+                    int l = Character.digit(hex2, 16);
+                    if (i == -1 || l == -1) {
+                        throw new IllegalArgumentException("Invalid encoded sequence \"" + source.substring(i) + "\"");
+                    }
+                    baos.write((char) ((u << 4) + l));
+                    i += 2;
+                    changed = true;
+                }
+                else {
+                    throw new IllegalArgumentException("Invalid encoded sequence \"" + source.substring(i) + "\"");
+                }
+            }
+            else {
+                baos.write(ch);
+            }
+        }
+        return (changed ? StreamUtils.copyToString(baos, charset) : source);
+    }
+
+    /**
+     * Copy the given {@link Collection} into a {@code String} array.
+     * <p>The {@code Collection} must contain {@code String} elements only.
+     * @param collection the {@code Collection} to copy
+     * (potentially {@code null} or empty)
+     * @return the resulting {@code String} array
+     */
+    public static String[] toStringArray(@Nullable Collection<String> collection) {
+        return (!CollectionUtils.isEmpty(collection) ? collection.toArray(EMPTY_STRING_ARRAY) : EMPTY_STRING_ARRAY);
+    }
+
+    public static String[] delimitedListToStringArray(@Nullable String str, @Nullable String delimiter) {
+        return delimitedListToStringArray(str, delimiter, null);
+    }
+
+    /**
+     * Take a {@code String} that is a delimited list and convert it into
+     * a {@code String} array.
+     * <p>A single {@code delimiter} may consist of more than one character,
+     * but it will still be considered as a single delimiter string, rather
+     * than as bunch of potential delimiter characters, in contrast to
+     * {@link #tokenizeToStringArray}.
+     * @param str the input {@code String} (potentially {@code null} or empty)
+     * @param delimiter the delimiter between elements (this is a single delimiter,
+     * rather than a bunch individual delimiter characters)
+     * @param charsToDelete a set of characters to delete; useful for deleting unwanted
+     * line breaks: e.g. "\r\n\f" will delete all new lines and line feeds in a {@code String}
+     * @return an array of the tokens in the list
+     * @see #tokenizeToStringArray
+     */
+    public static String[] delimitedListToStringArray(
+            @Nullable String str, @Nullable String delimiter, @Nullable String charsToDelete) {
+
+        if (str == null) {
+            return EMPTY_STRING_ARRAY;
+        }
+        if (delimiter == null) {
+            return new String[] {str};
+        }
+
+        List<String> result = new ArrayList<>();
+        if (delimiter.isEmpty()) {
+            for (int i = 0; i < str.length(); i++) {
+                result.add(deleteAny(str.substring(i, i + 1), charsToDelete));
+            }
+        }
+        else {
+            int pos = 0;
+            int delPos;
+            while ((delPos = str.indexOf(delimiter, pos)) != -1) {
+                result.add(deleteAny(str.substring(pos, delPos), charsToDelete));
+                pos = delPos + delimiter.length();
+            }
+            if (str.length() > 0 && pos <= str.length()) {
+                // Add rest of String, but not in case of empty input.
+                result.add(deleteAny(str.substring(pos), charsToDelete));
+            }
+        }
+        return toStringArray(result);
+    }
+    
     /**
      * Convert a {@code String} array into a delimited {@code String} (e.g. CSV).
      * <p>Useful for {@code toString()} implementations.

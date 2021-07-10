@@ -137,13 +137,13 @@ public abstract class TypeUtils {
 
             for (Type lBound : lUpperBounds) {
                 for (Type rBound : rUpperBounds) {
-                    if (!isAssignable(lBound, rBound)) {
+                    if (!isAssignableBound(lBound, rBound)) {
                         return false;
                     }
                 }
 
                 for (Type rBound : rLowerBounds) {
-                    if (!isAssignable(lBound, rBound)) {
+                    if (!isAssignableBound(lBound, rBound)) {
                         return false;
                     }
                 }
@@ -151,13 +151,13 @@ public abstract class TypeUtils {
 
             for (Type lBound : lLowerBounds) {
                 for (Type rBound : rUpperBounds) {
-                    if (!isAssignable(rBound, lBound)) {
+                    if (!isAssignableBound(rBound, lBound)) {
                         return false;
                     }
                 }
 
                 for (Type rBound : rLowerBounds) {
-                    if (!isAssignable(rBound, lBound)) {
+                    if (!isAssignableBound(rBound, lBound)) {
                         return false;
                     }
                 }
@@ -165,13 +165,13 @@ public abstract class TypeUtils {
         }
         else {
             for (Type lBound : lUpperBounds) {
-                if (!isAssignable(lBound, rhsType)) {
+                if (!isAssignableBound(lBound, rhsType)) {
                     return false;
                 }
             }
 
             for (Type lBound : lLowerBounds) {
-                if (!isAssignable(rhsType, lBound)) {
+                if (!isAssignableBound(rhsType, lBound)) {
                     return false;
                 }
             }
