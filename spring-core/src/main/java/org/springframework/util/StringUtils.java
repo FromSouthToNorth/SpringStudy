@@ -752,7 +752,7 @@ public class StringUtils {
                     char hex2 = source.charAt(i + 2);
                     int u = Character.digit(hex1, 16);
                     int l = Character.digit(hex2, 16);
-                    if (i == -1 || l == -1) {
+                    if (u == -1 || l == -1) {
                         throw new IllegalArgumentException("Invalid encoded sequence \"" + source.substring(i) + "\"");
                     }
                     baos.write((char) ((u << 4) + l));
@@ -771,6 +771,125 @@ public class StringUtils {
     }
 
     /**
+     * Parse the given {@code String} value into a {@link Locale}, accepting
+     * the {@link Locale#toString} format as well as BCP 47 language tags.
+     * @param localeValue the locale value: following either {@code Locale's}
+     * {@code toString()} format ("en", "en_UK", etc), also accepting spaces as
+     * separators (as an alternative to underscores), or BCP 47 (e.g. "en-UK")
+     * as specified by {@link Locale#forLanguageTag} on Java 7+
+     * @return a corresponding {@code Locale} instance, or {@code null} if none
+     * @throws IllegalArgumentException in case of an invalid locale specification
+     * @since 5.0.4
+     * @see #parseLocaleString
+     * @see Locale#forLanguageTag
+     */
+    @Nullable
+    public static Locale parseLocale(String localeValue) {
+        String[] tokens = tokenizeLocaleSource(localeValue);
+        if (tokens.length == 1) {
+            validateLocalePart(localeValue);
+            Locale resolved = Locale.forLanguageTag(localeValue);
+            if (resolved.getLanguage().length() > 0) {
+                return resolved;
+            }
+        }
+        return parseLocaleTokens(localeValue, tokens);
+    }
+
+    /**
+     * Parse the given {@code String} representation into a {@link Locale}.
+     * <p>For many parsing scenarios, this is an inverse operation of
+     * {@link Locale#toString Locale's toString}, in a lenient sense.
+     * This method does not aim for strict {@code Locale} design compliance;
+     * it is rather specifically tailored for typical Spring parsing needs.
+     * <p><b>Note: This delegate does not accept the BCP 47 language tag format.
+     * Please use {@link #parseLocale} for lenient parsing of both formats.</b>
+     * @param localeString the locale {@code String}: following {@code Locale's}
+     * {@code toString()} format ("en", "en_UK", etc), also accepting spaces as
+     * separators (as an alternative to underscores)
+     * @return a corresponding {@code Locale} instance, or {@code null} if none
+     * @throws IllegalArgumentException in case of an invalid locale specification
+     */
+    @Nullable
+    public static Locale parseLocaleString(String localeString) {
+        return parseLocaleTokens(localeString, tokenizeLocaleSource(localeString));
+    }
+
+    private static String[] tokenizeLocaleSource(String localeSource) {
+        return tokenizeToStringArray(localeSource, "_ ", false, false);
+    }
+
+    @Nullable
+    private static Locale parseLocaleTokens(String localeString, String[] tokens) {
+        String language = (tokens.length > 0 ? tokens[0] : "");
+        String country = (tokens.length > 1 ?tokens[1] : "");
+        validateLocalePart(language);
+        validateLocalePart(country);
+
+        String variant = "";
+        if (tokens.length > 2) {
+            // There is definitely a variant, and it is everything after the country
+            // code sans the separator between the country code and the variant.
+            int endIndexOfCountryCode = localeString.indexOf(country, language.length()) + country.length();
+            // Strip off any leading '_' and whitespace, what's left is the variant.
+            variant = trimLeadingWhitespace(localeString.substring(endIndexOfCountryCode));
+            if (variant.startsWith("_")) {
+                variant = trimLeadingCharacter(variant, '_');
+            }
+        }
+
+        if (variant.isEmpty() && country.startsWith("#")) {
+            variant = country;
+            country = "";
+        }
+
+        return (language.length() > 0 ? new Locale(language, country, variant) : null);
+    }
+
+    private static void validateLocalePart(String localePart) {
+        for (int i = 0; i < localePart.length(); i++) {
+            char ch = localePart.charAt(i);
+            if (ch != ' ' && ch != '_' && ch != '-' && ch != '#' && Character.isLetterOrDigit(ch)) {
+                throw new IllegalArgumentException(
+                        "Locale part \"" + localePart + "\" contains invalid characters");
+            }
+        }
+    }
+
+    /**
+     * Determine the RFC 3066 compliant language tag,
+     * as used for the HTTP "Accept-Language" header.
+     * @param locale the Locale to transform to a language tag
+     * @return the RFC 3066 compliant language tag as {@code String}
+     * @deprecated as of 5.0.4, in favor of {@link Locale#toLanguageTag()}
+     */
+    @Deprecated
+    public static String toLanguageTab(Locale locale) {
+        return locale.getLanguage() + (hasLength(locale.getCountry()) ? "-" + locale.getLanguage() : "");
+    }
+
+    /**
+     * Parse the given {@code timeZoneString} value into a {@link TimeZone}.
+     * @param timeZoneString the time zone {@code String}, following {@link TimeZone#getTimeZone(String)}
+     * but throwing {@link IllegalArgumentException} in case of an invalid time zone specification
+     * @return a corresponding {@link TimeZone} instance
+     * @throws IllegalArgumentException in case of an invalid time zone specification
+     */
+    public static TimeZone parseTimeZoneString(String timeZoneString) {
+        TimeZone timeZone = TimeZone.getTimeZone(timeZoneString);
+        if ("GMT".equals(timeZone.getID()) && !timeZoneString.startsWith("GMT")) {
+            // We don't want that GMT fallback...
+            throw new IllegalArgumentException("Invalid time zone specification '" +timeZoneString + "'");
+        }
+        return timeZone;
+    }
+
+    //---------------------------------------------------------------------
+    // Convenience methods for working with String arrays
+    //---------------------------------------------------------------------
+
+
+    /**
      * Copy the given {@link Collection} into a {@code String} array.
      * <p>The {@code Collection} must contain {@code String} elements only.
      * @param collection the {@code Collection} to copy
@@ -781,6 +900,279 @@ public class StringUtils {
         return (!CollectionUtils.isEmpty(collection) ? collection.toArray(EMPTY_STRING_ARRAY) : EMPTY_STRING_ARRAY);
     }
 
+    /**
+     * Copy the given {@link Enumeration} into a {@code String} array.
+     * <p>The {@code Enumeration} must contain {@code String} elements only.
+     * @param enumeration the {@code Enumeration} to copy
+     * (potentially {@code null} or empty)
+     * @return the resulting {@code String} array
+     */
+    public static String[] toStringArray(@Nullable Enumeration<String> enumeration) {
+        return (enumeration != null ? toStringArray(Collections.list(enumeration)) : EMPTY_STRING_ARRAY);
+    }
+
+    public static String[] addStringToArray(@Nullable String[] array, String str) {
+        if (ObjectUtils.isEmpty(array)) {
+            return new String[] {str};
+        }
+
+        String[] newArr = new String[array.length + 1];
+        System.arraycopy(array, 0, newArr, 0, array.length);
+        newArr[array.length] = str;
+        return newArr;
+    }
+
+
+    /**
+     * Concatenate the given {@code String} arrays into one,
+     * with overlapping array elements included twice.
+     * <p>The order of elements in the original arrays is preserved.
+     * @param array1 the first array (can be {@code null})
+     * @param array2 the second array (can be {@code null})
+     * @return the new array ({@code null} if both given arrays were {@code null})
+     */
+    @Nullable
+    public static String[] concatenateStringArrays(@Nullable String[] array1, @Nullable String[] array2) {
+        if (ObjectUtils.isEmpty(array1)) {
+            return array2;
+        }
+
+        if (ObjectUtils.isEmpty(array2)) {
+            return array1;
+        }
+
+        String[] newArr= new String[array1.length + array2.length];
+        System.arraycopy(array1, 0, newArr, 0, array1.length);
+        System.arraycopy(array2, 0, newArr, array1.length, array2.length);
+        return newArr;
+    }
+
+    /**
+     * Merge the given {@code String} arrays into one, with overlapping
+     * array elements only included once.
+     * <p>The order of elements in the original arrays is preserved
+     * (with the exception of overlapping elements, which are only
+     * included on their first occurrence).
+     * @param array1 the first array (can be {@code null})
+     * @param array2 the second array (can be {@code null})
+     * @return the new array ({@code null} if both given arrays were {@code null})
+     * @deprecated as of 4.3.15, in favor of manual merging via {@link LinkedHashSet}
+     * (with every entry included at most once, even entries within the first array)
+     */
+    @Deprecated
+    @Nullable
+    public static String[] mergeStringArrays(@Nullable String[] array1, @Nullable String[] array2) {
+        if (ObjectUtils.isEmpty(array1)) {
+            return array2;
+        }
+        if (ObjectUtils.isEmpty(array2)) {
+            return array1;
+        }
+
+        List<String> result = new ArrayList<>(Arrays.asList(array1));
+        for (String str : array2) {
+            if (!result.contains(str)) {
+                result.add(str);
+            }
+        }
+        return toStringArray(result);
+    }
+
+    /**
+     * Sort the given {@code String} array if necessary.
+     * @param array the original array (potentially empty)
+     * @return the array in sorted form (never {@code null})
+     */
+    public static String[] sortStringArray(String[] array) {
+        if (ObjectUtils.isEmpty(array)) {
+            return array;
+        }
+        Arrays.sort(array);
+        return array;
+    }
+
+    /**
+     * Trim the elements of the given {@code String} array, calling
+     * {@code String.trim()} on each non-null element.
+     * @param array the original {@code String} array (potentially empty)
+     * @return the resulting array (of the same size) with trimmed elements
+     */
+    public static String[] trimArrayElements(String[] array) {
+        if (ObjectUtils.isEmpty(array)) {
+            return array;
+        }
+
+        String[] result = new String[array.length];
+        for (int i = 0; i < array.length; i++) {
+            String element = array[i];
+            result[i] = (element != null ? element.trim() : null);
+        }
+        return result;
+    }
+
+    /**
+     * Remove duplicate strings from the given array.
+     * <p>As of 4.2, it preserves the original order, as it uses a {@link LinkedHashSet}.
+     * @param array the {@code String} array (potentially empty)
+     * @return an array without duplicates, in natural sort order
+     */
+    public static String[] removeDuplicateStrings(String[] array) {
+        if (ObjectUtils.isEmpty(array)) {
+            return array;
+        }
+
+        Set<String> set = new LinkedHashSet<>(Arrays.asList(array));
+        return toStringArray(set);
+    }
+
+    /**
+     * Split a {@code String} at the first occurrence of the delimiter.
+     * Does not include the delimiter in the result.
+     * @param toSplit the string to split (potentially {@code null} or empty)
+     * @param delimiter to split the string up with (potentially {@code null} or empty)
+     * @return a two element array with index 0 being before the delimiter, and
+     * index 1 being after the delimiter (neither element includes the delimiter);
+     * or {@code null} if the delimiter wasn't found in the given input {@code String}
+     */
+    @Nullable
+    public static String[] split(@Nullable String toSplit, @Nullable String delimiter) {
+        if(!hasLength(toSplit) || !hasLength(delimiter)) {
+            return null;
+        }
+        int offset = toSplit.indexOf(delimiter);
+        if (offset < 0) {
+            return null;
+        }
+
+        String beforeDelimiter = toSplit.substring(0, offset);
+        String afterDelimiter = toSplit.substring(offset + delimiter.length());
+        return new String[] {beforeDelimiter, afterDelimiter};
+    }
+
+    /**
+     * Take an array of strings and split each element based on the given delimiter.
+     * A {@code Properties} instance is then generated, with the left of the delimiter
+     * providing the key, and the right of the delimiter providing the value.
+     * <p>Will trim both the key and value before adding them to the {@code Properties}.
+     * @param array the array to process
+     * @param delimiter to split each element using (typically the equals symbol)
+     * @return a {@code Properties} instance representing the array contents,
+     * or {@code null} if the array to process was {@code null} or empty
+     */
+    @Nullable
+    public static Properties splitArrayElementsIntoProperties(String[] array, String delimiter) {
+        return splitArrayElementsIntoProperties(array, delimiter, null);
+    }
+
+    /**
+     * Take an array of strings and split each element based on the given delimiter.
+     * A {@code Properties} instance is then generated, with the left of the
+     * delimiter providing the key, and the right of the delimiter providing the value.
+     * <p>Will trim both the key and value before adding them to the
+     * {@code Properties} instance.
+     * @param array the array to process
+     * @param delimiter to split each element using (typically the equals symbol)
+     * @param charsToDelete one or more characters to remove from each element
+     * prior to attempting the split operation (typically the quotation mark
+     * symbol), or {@code null} if no removal should occur
+     * @return a {@code Properties} instance representing the array contents,
+     * or {@code null} if the array to process was {@code null} or empty
+     */
+    @Nullable
+    public static Properties splitArrayElementsIntoProperties(
+            String[] array, String delimiter, @Nullable String charsToDelete) {
+
+        if (ObjectUtils.isEmpty(array)) {
+            return null;
+        }
+
+        Properties result = new Properties();
+        for (String element : array) {
+            if (charsToDelete != null) {
+                element = deleteAny(element, charsToDelete);
+            }
+            String[] splittedElement = split(element, delimiter);
+            if (splittedElement == null) {
+                continue;
+            }
+            result.setProperty(splittedElement[0].trim(), splittedElement[1].trim());
+        }
+        return result;
+    }
+
+    /**
+     * Tokenize the given {@code String} into a {@code String} array via a
+     * {@link StringTokenizer}.
+     * <p>Trims tokens and omits empty tokens.
+     * <p>The given {@code delimiters} string can consist of any number of
+     * delimiter characters. Each of those characters can be used to separate
+     * tokens. A delimiter is always a single character; for multi-character
+     * delimiters, consider using {@link #delimitedListToStringArray}.
+     * @param str the {@code String} to tokenize (potentially {@code null} or empty)
+     * @param delimiters the delimiter characters, assembled as a {@code String}
+     * (each of the characters is individually considered as a delimiter)
+     * @return an array of the tokens
+     * @see java.util.StringTokenizer
+     * @see String#trim()
+     * @see #delimitedListToStringArray
+     */
+    public static String[] tokenizeToStringArray(@Nullable String str, String delimiters) {
+        return tokenizeToStringArray(str, delimiters, true, true);
+    }
+
+    /**
+     * Tokenize the given {@code String} into a {@code String} array via a
+     * {@link StringTokenizer}.
+     * <p>The given {@code delimiters} string can consist of any number of
+     * delimiter characters. Each of those characters can be used to separate
+     * tokens. A delimiter is always a single character; for multi-character
+     * delimiters, consider using {@link #delimitedListToStringArray}.
+     * @param str the {@code String} to tokenize (potentially {@code null} or empty)
+     * @param delimiters the delimiter characters, assembled as a {@code String}
+     * (each of the characters is individually considered as a delimiter)
+     * @param trimTokens trim the tokens via {@link String#trim()}
+     * @param ignoreEmptyTokens omit empty tokens from the result array
+     * (only applies to tokens that are empty after trimming; StringTokenizer
+     * will not consider subsequent delimiters as token in the first place).
+     * @return an array of the tokens
+     * @see java.util.StringTokenizer
+     * @see String#trim()
+     * @see #delimitedListToStringArray
+     */
+    public static String[] tokenizeToStringArray(
+            @Nullable String str, String delimiters, boolean trimTokens, boolean ignoreEmptyTokens) {
+
+        if (str == null) {
+            return EMPTY_STRING_ARRAY;
+        }
+
+        StringTokenizer st = new StringTokenizer(str, delimiters);
+        List<String> tokens = new ArrayList<>();
+        while (st.hasMoreTokens()) {
+            String token = st.nextToken();
+            if (trimTokens) {
+                token = token.trim();
+            }
+            if (!ignoreEmptyTokens || token.length() > 0) {
+                tokens.add(token);
+            }
+        }
+        return toStringArray(tokens);
+    }
+
+    /**
+     * Take a {@code String} that is a delimited list and convert it into a
+     * {@code String} array.
+     * <p>A single {@code delimiter} may consist of more than one character,
+     * but it will still be considered as a single delimiter string, rather
+     * than as bunch of potential delimiter characters, in contrast to
+     * {@link #tokenizeToStringArray}.
+     * @param str the input {@code String} (potentially {@code null} or empty)
+     * @param delimiter the delimiter between elements (this is a single delimiter,
+     * rather than a bunch individual delimiter characters)
+     * @return an array of the tokens in the list
+     * @see #tokenizeToStringArray
+     */
     public static String[] delimitedListToStringArray(@Nullable String str, @Nullable String delimiter) {
         return delimitedListToStringArray(str, delimiter, null);
     }
@@ -830,39 +1222,29 @@ public class StringUtils {
         }
         return toStringArray(result);
     }
-    
+
     /**
-     * Convert a {@code String} array into a delimited {@code String} (e.g. CSV).
-     * <p>Useful for {@code toString()} implementations.
-     * @param arr the array to display (potentially {@code null} or empty)
-     * @param delim the delimiter to use (typically a ",")
-     * @return the delimited {@code String}
+     * Convert a comma delimited list (e.g., a row from a CSV file) into an
+     * array of strings.
+     * @param str the input {@code String} (potentially {@code null} or empty)
+     * @return an array of strings, or the empty array in case of empty input
      */
-    public static String arrayToDelimitedString(@Nullable Object[] arr, String delim) {
-        if (ObjectUtils.isEmpty(arr)) {
-            return "";
-        }
-        if (arr.length == 1) {
-            return ObjectUtils.nullSafeToString(arr[0]);
-        }
-        StringJoiner sj = new StringJoiner(delim);
-        for (Object elem : arr) {
-            sj.add(String.valueOf(elem));
-        }
-        return sj.toString();
+    public static String[] commaDelimitedListToStringArray(@Nullable String str) {
+        return delimitedListToStringArray(str, ",");
     }
 
     /**
-     * Convert a {@code String} array into a comma delimited {@code String}
-     * (i.e., CSV).
-     * <p>Useful for {@code toString()} implementations.
-     * @param arr the array to display (potentially {@code null} or empty)
-     * @return the delimited {@code String}
+     * Convert a comma delimited list (e.g., a row from a CSV file) into a set.
+     * <p>Note that this will suppress duplicates, and as of 4.2, the elements in
+     * the returned set will preserve the original order in a {@link LinkedHashSet}.
+     * @param str the input {@code String} (potentially {@code null} or empty)
+     * @return a set of {@code String} entries in the list
+     * @see #removeDuplicateStrings(String[])
      */
-    public static String arrayToDelimitedString(@Nullable Object[] arr) {
-        return arrayToDelimitedString(arr, ",");
+    public static Set<String> commDelimitedListToSet(@Nullable String str) {
+        String[] tokens = commaDelimitedListToStringArray(str);
+        return new LinkedHashSet<>(Arrays.asList(tokens));
     }
-
 
     /**
      * Convert a {@link Collection} to a delimited {@code String} (e.g. CSV).
@@ -911,4 +1293,48 @@ public class StringUtils {
     public static String collectionToCommaDelimitedString(@Nullable Collection<?> coll) {
         return collectionToDelimitedString(coll, ",");
     }
+
+    /**
+     * Convert a {@code String} array into a comma delimited {@code String}
+     * (i.e., CSV).
+     * <p>Useful for {@code toString()} implementations.
+     * @param arr the array to display (potentially {@code null} or empty)
+     * @return the delimited {@code String}
+     */
+    public static String arrayToDelimitedString(@Nullable Object[] arr) {
+        return arrayToDelimitedString(arr, ",");
+    }
+
+    /**
+     * Convert a {@code String} array into a delimited {@code String} (e.g. CSV).
+     * <p>Useful for {@code toString()} implementations.
+     * @param arr the array to display (potentially {@code null} or empty)
+     * @param delim the delimiter to use (typically a ",")
+     * @return the delimited {@code String}
+     */
+    public static String arrayToDelimitedString(@Nullable Object[] arr, String delim) {
+        if (ObjectUtils.isEmpty(arr)) {
+            return "";
+        }
+        if (arr.length == 1) {
+            return ObjectUtils.nullSafeToString(arr[0]);
+        }
+        StringJoiner sj = new StringJoiner(delim);
+        for (Object elem : arr) {
+            sj.add(String.valueOf(elem));
+        }
+        return sj.toString();
+    }
+
+    /**
+     * Convert a {@code String} array into a comma delimited {@code String}
+     * (i.e., CSV).
+     * <p>Useful for {@code toString()} implementations.
+     * @param arr the array to display (potentially {@code null} or empty)
+     * @return the delimited {@code String}
+     */
+    public static String arrayToCommaDelimitedString(@Nullable Object[] arr) {
+        return arrayToDelimitedString(arr, ",");
+    }
+
 }
