@@ -19,7 +19,6 @@ import java.util.StringJoiner;
 import java.util.StringTokenizer;
 import java.util.TimeZone;
 
-import com.sun.org.apache.bcel.internal.generic.IF_ACMPEQ;
 import org.springframework.lang.Nullable;
 
 /**
@@ -44,7 +43,7 @@ import org.springframework.lang.Nullable;
  * @author Brian Clozel
  * @since 16 April 2001
  */
-public class StringUtils {
+public abstract class StringUtils {
 
     private static final String[] EMPTY_STRING_ARRAY = {};
 
