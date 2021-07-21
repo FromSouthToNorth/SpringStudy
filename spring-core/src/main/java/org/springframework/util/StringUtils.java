@@ -604,6 +604,7 @@ public abstract class StringUtils {
      * @param path the file path
      * @return the path with stripped filename extension
      */
+    @Nullable
     public static String stripFilenameExtension(String path) {
         int extIndex = path.lastIndexOf(FOLDER_SEPARATOR);
         if (extIndex == -1) {

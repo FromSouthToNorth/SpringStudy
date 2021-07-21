@@ -11,6 +11,7 @@
         <module>spring-beans</module>
         <module>spring-jcl</module>
         <module>spring-core</module>
+        <module>spring-context</module>
     </modules>
 
     <packaging>pom</packaging>
