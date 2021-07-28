@@ -25,6 +25,7 @@ public class AnnotationAwareOrderComparator extends OrderComparator {
 
     public static final AnnotationAwareOrderComparator INSTANCE = new AnnotationAwareOrderComparator();
 
+    @Override
     protected Integer findOrder(Object obj) {
         Integer order = super.find
     }

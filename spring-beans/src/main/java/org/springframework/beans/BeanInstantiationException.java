@@ -103,4 +103,5 @@ public class BeanInstantiationException extends FatalBeanException {
     public Method getConstructingMethod() {
         return this.constructingMethod;
     }
+
 }

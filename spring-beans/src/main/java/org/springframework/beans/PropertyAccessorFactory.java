@@ -34,4 +34,5 @@ public final class PropertyAccessorFactory {
     public static ConfigurablePropertyAccessor forDirectFieldAccess(Object target) {
         return new DirectFieldAccessor();
     }
+
 }

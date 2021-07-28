@@ -8,5 +8,8 @@ package org.springframework.beans;
  * @since 3.2
  * @see SimpleTypeConverter
  */
-public abstract class TypeConverterSupport {
+public abstract class TypeConverterSupport extends PropertyEditorRegistrySupport implements TypeConverter {
+
+
+
 }

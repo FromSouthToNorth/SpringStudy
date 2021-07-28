@@ -11,5 +11,12 @@ package org.springframework.beans;
  * @see #getPropertyValue
  * @see #setPropertyValue
  */
-public abstract class AbstractPropertyAccessor implements ConfigurablePropertyAccessor {
+public abstract class AbstractPropertyAccessor extends TypeConverterSupport implements ConfigurablePropertyAccessor {
+
+    private boolean extractOldValueForEditor = false;
+
+    private boolean autoGrowNestedPaths = false;
+
+    boolean suppressNotWritablePropertyException = false;
+
 }

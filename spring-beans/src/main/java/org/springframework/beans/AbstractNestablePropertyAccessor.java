@@ -1,5 +1,11 @@
 package org.springframework.beans;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.springframework.lang.Nullable;
+
+import java.util.Map;
+
 /**
  * A basic {@link ConfigurablePropertyAccessor} that provides the necessary
  * infrastructure for all typical use cases.
@@ -25,4 +31,36 @@ package org.springframework.beans;
  * @see PropertyEditorRegistrySupport
  */
 public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyAccessor {
+
+    private static final Log logger = LogFactory.getLog(AbstractNestablePropertyAccessor.class);
+
+    private int autoGrowCollectionLimit = Integer.MAX_VALUE;
+
+    @Nullable
+    Object wrappedObject;
+
+    private String nestedPath = "";
+
+    @Nullable
+    Object rootObject;
+
+    /** Map with cached nested Accessors: nested path -> Accessor instance. */
+    @Nullable
+    private Map<String, AbstractNestablePropertyAccessor> nestedPropertyAccessorMap;
+
+    /**
+     * Create a new empty accessor. Wrapped instance needs to be set afterwards.
+     * Registers default editors.
+     * @see #setWrappedInstance
+     */
+    protected AbstractNestablePropertyAccessor() {
+        this(true);
+    }
+
+    protected AbstractNestablePropertyAccessor(boolean registerDefaultEditors) {
+//        if (registerDefaultEditors) {
+//            registerDefaultEditors();
+//        }
+//        this.ty
+    }
 }

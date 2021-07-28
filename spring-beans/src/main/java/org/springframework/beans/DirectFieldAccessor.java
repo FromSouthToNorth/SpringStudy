@@ -1,5 +1,9 @@
 package org.springframework.beans;
 
+import org.springframework.core.MethodParameter;
+import org.springframework.core.convert.TypeDescriptor;
+import org.springframework.lang.Nullable;
+
 import java.util.Map;
 
 /**
@@ -23,4 +27,66 @@ import java.util.Map;
  * @see org.springframework.validation.DataBinder#initDirectFieldAccess()
  */
 public class DirectFieldAccessor extends AbstractNestablePropertyAccessor {
+
+    @Override
+    public boolean isReadableProperty(String propertyName) {
+        return false;
+    }
+
+    @Override
+    public boolean isWritableProperty(String propertyName) {
+        return false;
+    }
+
+    @Nullable
+    @Override
+    public Class<?> getPropertyType(String propertyName) throws BeansException {
+        return null;
+    }
+
+    @Nullable
+    @Override
+    public TypeDescriptor getPropertyTypeDescriptor(String propertyName) throws BeansException {
+        return null;
+    }
+
+    @Nullable
+    @Override
+    public Object getPropertyValue(String propertyName) throws BeansException {
+        return null;
+    }
+
+    @Override
+    public void setPropertyValue(String propertyName, @Nullable Object value) throws BeansException {
+
+    }
+
+    @Override
+    public void setPropertyValues(Map<?, ?> map) throws BeansException {
+
+    }
+
+    @Override
+    public void setPropertyValues(PropertyValues pvs) throws BeansException {
+
+    }
+
+    @Nullable
+    @Override
+    public <T> T convertIfNecessary(@Nullable Object value, @Nullable Class<T> requiredType) throws TypeMismatchException {
+        return null;
+    }
+
+    @Nullable
+    @Override
+    public <T> T convertIfNecessary(@Nullable Object value, @Nullable Class<T> requiredType, @Nullable MethodParameter methodParam) throws TypeMismatchException {
+        return null;
+    }
+
+    @Nullable
+    @Override
+    public <T> T convertIfNecessary(@Nullable Object value, @Nullable Class<T> requiredType, @Nullable TypeDescriptor typeDescriptor) throws TypeMismatchException {
+        return null;
+    }
+
 }

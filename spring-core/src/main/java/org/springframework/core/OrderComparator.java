@@ -1,10 +1,11 @@
 package org.springframework.core;
 
-import org.jetbrains.annotations.NotNull;
 import org.springframework.lang.Nullable;
 import org.springframework.util.ObjectUtils;
 
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
 
 /**
  * {@link Comparator} implementation for {@link Ordered} objects, sorting
@@ -40,8 +41,14 @@ public class OrderComparator implements Comparator<Object> {
      */
     public static final OrderComparator INSTANCE = new OrderComparator();
 
-    public Comparable<Object> withSourceProvider(OrderSourceProvider sourceProvider) {
-        return (o1, o2) -> doCompare()
+    /**
+     * Build an adapted order comparator with the given source provider.
+     * @param sourceProvider the order source provider to use
+     * @return the adapted comparator
+     * @since 4.1
+     */
+    public Comparator<Object> withSourceProvider(OrderSourceProvider sourceProvider) {
+        return (o1, o2) -> doCompare(o1, o2, sourceProvider);
     }
 
     @Override
@@ -128,6 +135,49 @@ public class OrderComparator implements Comparator<Object> {
     @Nullable
     public Integer getPriority(Object obj) {
         return null;
+    }
+
+    /**
+     * Sort the given List with a default OrderComparator.
+     * <p>Optimized to skip sorting for lists with size 0 or 1,
+     * in order to avoid unnecessary array extraction.
+     * @param list the List to sort
+     * @see java.util.List#sort(java.util.Comparator)
+     */
+    public static void sort(List<?> list) {
+        if (list.size() > 1) {
+            list.sort(INSTANCE);
+        }
+    }
+
+    /**
+     * Sort the given array with a default OrderComparator.
+     * <p>Optimized to skip sorting for lists with size 0 or 1,
+     * in order to avoid unnecessary array extraction.
+     * @param array the array to sort
+     * @see java.util.Arrays#sort(Object[], java.util.Comparator)
+     */
+    public static void sort(Object[] array) {
+        if (array.length > 1) {
+            Arrays.sort(array, INSTANCE);
+        }
+    }
+
+    /**
+     * Sort the given array or List with a default OrderComparator,
+     * if necessary. Simply skips sorting when given any other value.
+     * <p>Optimized to skip sorting for lists with size 0 or 1,
+     * in order to avoid unnecessary array extraction.
+     * @param value the array or List to sort
+     * @see java.util.Arrays#sort(Object[], java.util.Comparator)
+     */
+    public static void sortIfNecessary(Object value) {
+        if (value instanceof Object[]) {
+            sort((Object[]) value);
+        }
+        else if (value instanceof List) {
+            sort((List<?>) value);
+        }
     }
 
     /**
