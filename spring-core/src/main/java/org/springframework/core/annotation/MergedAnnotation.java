@@ -5,6 +5,7 @@ import org.springframework.lang.Nullable;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.Inherited;
 import java.lang.reflect.AnnotatedElement;
+import java.lang.reflect.Proxy;
 import java.util.*;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -75,6 +76,17 @@ public interface MergedAnnotation<A extends Annotation> {
      * @return {@code true} if the annotation is meta-present
      */
     boolean isMetaPresent();
+
+    /**
+     * Get the distance of this annotation related to its use as a
+     * meta-annotation.
+     * <p>A directly declared annotation has a distance of {@code 0}, a
+     * meta-annotation has a distance of {@code 1}, a meta-annotation on a
+     * meta-annotation has a distance of {@code 2}, etc. A {@linkplain #missing()
+     * missing} annotation will always return a distance of {@code -1}.
+     * @return the annotation distance or {@code -1} if the annotation is missing
+     */
+    int getDistance();
 
     /**
      * Get the index of the aggregate collection containing this annotation.
@@ -196,7 +208,7 @@ public interface MergedAnnotation<A extends Annotation> {
      * @return the value as a char array
      * @throws NoSuchElementException if there is no matching attribute
      */
-    char[] getaCharArray(String attributeName) throws NoSuchElementException;
+    char[] getCharArray(String attributeName) throws NoSuchElementException;
 
     /**
      * Get a required short attribute value from the annotation.
@@ -373,7 +385,7 @@ public interface MergedAnnotation<A extends Annotation> {
      * @return an optional of the default value or {@link Optional#empty()} if
      * there is no matching attribute or no defined default
      */
-    Optional<Object> gerDefaultValue(String attributeName);
+    Optional<Object> getDefaultValue(String attributeName);
 
     /**
      * Get the default attribute value from the annotation as specified in
@@ -423,6 +435,146 @@ public interface MergedAnnotation<A extends Annotation> {
      * @return an immutable map containing the attributes and values
      */
     AnnotationAttributes asAnnotationAttributes(Adapt... adapts);
+
+    /**
+     * Get an immutable {@link Map} that contains all the annotation attributes.
+     * <p>The {@link Adapt adaptations} may be used to change the way that values are added.
+     * @param adaptations the adaptations that should be applied to the annotation values
+     * @return an immutable map containing the attributes and values
+     */
+    Map<String, Object> asMap(Adapt... adaptations);
+
+    /**
+     * Create a new {@link Map} instance of the given type that contains all the annotation
+     * attributes.
+     * <p>The {@link Adapt adaptations} may be used to change the way that values are added.
+     * @param factory a map factory
+     * @param adaptations the adaptations that should be applied to the annotation values
+     * @return a map containing the attributes and values
+     */
+    <T extends Map<String, Object>> T asMap(Function<MergedAnnotation<?>, T> factory, Adapt... adaptations);
+
+    /**
+     * Create a type-safe synthesized version of this merged annotation that can
+     * be used directly in code.
+     * <p>The result is synthesized using a JDK {@link Proxy} and as a result may
+     * incur a computational cost when first invoked.
+     * <p>If this merged annotation was created {@linkplain #from(Annotation) from}
+     * an annotation instance, that annotation will be returned unmodified if it is
+     * not <em>synthesizable</em>. An annotation is considered synthesizable if
+     * one of the following is true.
+     * <ul>
+     * <li>The annotation declares attributes annotated with {@link AliasFor @AliasFor}.</li>
+     * <li>The annotation is a composed annotation that relies on convention-based
+     * annotation attribute overrides in meta-annotations.</li>
+     * <li>The annotation declares attributes that are annotations or arrays of
+     * annotations that are themselves synthesizable.</li>
+     * </ul>
+     * @return a synthesized version of the annotation or the original annotation
+     * unmodified
+     * @throws NoSuchElementException on a missing annotation
+     */
+    A synthesize() throws NoSuchElementException;
+
+    /**
+     * Optionally create a type-safe synthesized version of this annotation based
+     * on a condition predicate.
+     * <p>The result is synthesized using a JDK {@link Proxy} and as a result may
+     * incur a computational cost when first invoked.
+     * <p>Consult the documentation for {@link #synthesize()} for an explanation
+     * of what is considered synthesizable.
+     * @param condition the test to determine if the annotation can be synthesized
+     * @return an optional containing the synthesized version of the annotation or
+     * an empty optional if the condition doesn't match
+     * @throws NoSuchElementException on a missing annotation
+     * @see MergedAnnotationPredicates
+     */
+    Optional<A> synthesize(Predicate<? super MergedAnnotation<A>> condition) throws NoSuchElementException;
+
+    /**
+     * Create a {@link MergedAnnotation} that represents a missing annotation
+     * (i.e. one that is not present).
+     * @return an instance representing a missing annotation
+     */
+    static <A extends Annotation> MergedAnnotation<A> missing() {
+        return MissingMergedAnnotation.getInstance();
+    }
+
+    /**
+     * Create a new {@link MergedAnnotation} instance from the specified
+     * annotation.
+     * @param annotation the annotation to include
+     * @return a {@link MergedAnnotation} instance containing the annotation
+     */
+    static <A extends Annotation> MergedAnnotation<A> from(A annotation) {
+        return from(null, annotation);
+    }
+
+    /**
+     * Create a new {@link MergedAnnotation} instance from the specified
+     * annotation.
+     * @param source the source for the annotation. This source is used only for
+     * information and logging. It does not need to <em>actually</em> contain
+     * the specified annotations, and it will not be searched.
+     * @param annotation the annotation to include
+     * @return a {@link MergedAnnotation} instance for the annotation
+     */
+    static <A extends Annotation> MergedAnnotation<A> from(@Nullable Object source, A annotation) {
+        return TypeMappedAnnotation.from(source, annotation);
+    }
+
+    /**
+     * Create a new {@link MergedAnnotation} instance of the specified
+     * annotation type. The resulting annotation will not have any attribute
+     * values but may still be used to query default values.
+     * @param annotationType the annotation type
+     * @return a {@link MergedAnnotation} instance for the annotation
+     */
+    static <A extends Annotation> MergedAnnotation<A> of(Class<A> annotationType) {
+        return of(null, annotationType, null);
+    }
+
+    static <A extends Annotation> MergedAnnotation<A> of(
+            Class<A> annotationType, @Nullable Map<String, ?> attributes) {
+
+        return of(null, annotationType, attributes);
+    }
+
+    /**
+     * Create a new {@link MergedAnnotation} instance of the specified
+     * annotation type with attribute values supplied by a map.
+     * @param source the source for the annotation. This source is used only for
+     * information and logging. It does not need to <em>actually</em> contain
+     * the specified annotations and it will not be searched.
+     * @param annotationType the annotation type
+     * @param attributes the annotation attributes or {@code null} if just default
+     * values should be used
+     * @return a {@link MergedAnnotation} instance for the annotation and attributes
+     */
+    static <A extends Annotation> MergedAnnotation<A> of(
+            @Nullable AnnotatedElement source, Class<A> annotationType, @Nullable Map<String, ?> attributes) {
+
+        return of(null, source, annotationType, attributes);
+    }
+
+    /**
+     * Create a new {@link MergedAnnotation} instance of the specified
+     * annotation type with attribute values supplied by a map.
+     * @param classLoader the class loader used to resolve class attributes
+     * @param source the source for the annotation. This source is used only for
+     * information and logging. It does not need to <em>actually</em> contain
+     * the specified annotations and it will not be searched.
+     * @param annotationType the annotation type
+     * @param attributes the annotation attributes or {@code null} if just default
+     * values should be used
+     * @return a {@link MergedAnnotation} instance for the annotation and attributes
+     */
+    static <A extends Annotation> MergedAnnotation<A> of(
+            @Nullable ClassLoader classLoader, @Nullable Object source,
+            Class<A> annotationType, @Nullable Map<String, ?> attributes) {
+
+        return TypeMappedAnnotation.of(classLoader, source, annotationType, attributes);
+    }
 
     /**
      * Adaptations that can be applied to attribute values when creating

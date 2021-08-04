@@ -1,7 +1,9 @@
 package org.springframework.core.annotation;
 
 import org.springframework.core.BridgeMethodResolver;
+import org.springframework.lang.Nullable;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Method;
 
@@ -69,4 +71,50 @@ import java.lang.reflect.Method;
  * @see java.lang.reflect.AnnotatedElement#getDeclaredAnnotations()
  */
 public abstract class AnnotationUtils {
+
+    /**
+     * If the supplied throwable is an {@link AnnotationConfigurationException},
+     * it will be cast to an {@code AnnotationConfigurationException} and thrown,
+     * allowing it to propagate to the caller.
+     * <p>Otherwise, this method does nothing.
+     * @param ex the throwable to inspect
+     */
+    static void rethrowAnnotationConfigurationException(Throwable ex) {
+        if (ex instanceof AnnotationConfigurationException) {
+            throw (AnnotationConfigurationException) ex;
+        }
+    }
+
+    /**
+     * Handle the supplied annotation introspection exception.
+     * <p>If the supplied exception is an {@link AnnotationConfigurationException},
+     * it will simply be thrown, allowing it to propagate to the caller, and
+     * nothing will be logged.
+     * <p>Otherwise, this method logs an introspection failure (in particular for
+     * a {@link TypeNotPresentException}) before moving on, assuming nested
+     * {@code Class} values were not resolvable within annotation attributes and
+     * thereby effectively pretending there were no annotations on the specified
+     * element.
+     * @param element the element that we tried to introspect annotations on
+     * @param ex the exception that we encountered
+     * @see #rethrowAnnotationConfigurationException
+     * @see IntrospectionFailureLogger
+     */
+    static void handleIntrospectionFailure(@Nullable AnnotatedElement element, Throwable ex) {
+        rethrowAnnotationConfigurationException(ex);
+        IntrospectionFailureLogger logger = IntrospectionFailureLogger.INFO;
+        boolean meta = false;
+        if (element instanceof Class && Annotation.class.isAssignableFrom((Class<?>) element)) {
+            // Meta-annotation or (default) value lookup on an annotation type
+            logger = IntrospectionFailureLogger.DEBUG;
+            meta = true;
+        }
+        if (logger.isEnabled()) {
+            String message = meta ?
+                    "Failed to meta-introspect annotation " :
+                    "Failed to introspect annotations on ";
+            logger.log(message + element + ": " + ex);
+        }
+    }
+
 }

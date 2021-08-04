@@ -2,6 +2,7 @@ package org.springframework.core.io.support;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.lang.Nullable;
 import org.springframework.util.*;
 
@@ -73,7 +74,8 @@ public final class SpringFactoriesLoader {
         for (String factoryImplementationName : factoryImplementationNames) {
             result.add(instantiateFactory(factoryImplementationName, factoryType, classloaderToUse));
         }
-        Ann
+        AnnotationAwareOrderComparator.sort(result);
+        return result;
     }
 
     /**

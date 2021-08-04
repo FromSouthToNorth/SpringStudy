@@ -93,6 +93,25 @@ public abstract class ObjectUtils {
     }
 
     /**
+     * Check whether the given array contains the given element.
+     * @param array the array to check (may be {@code null},
+     * in which case the return value will always be {@code false})
+     * @param element the element to check for
+     * @return whether the element has been found in the given array
+     */
+    public static boolean containsElement(@Nullable Object[] array, Object element) {
+        if (array == null) {
+            return false;
+        }
+        for (Object arrayEle : array) {
+            if (nullSafeEquals(arrayEle, element)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Convert the given array (which may be a primitive array) to an
      * object array (if necessary of primitive wrapper objects).
      * <p>A {@code null} source value will be converted to an
