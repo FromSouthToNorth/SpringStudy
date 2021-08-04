@@ -465,9 +465,9 @@ public abstract class AnnotatedElementUtils {
      */
     @Nullable
     public static MultiValueMap<String, Object> getAllAnnotationAttributes(AnnotatedElement element,
-            String annotationName, final boolean classValueAsString, final boolean nestedAnnotationsAsMap) {
+            String annotationName, final boolean classValuesAsString, final boolean nestedAnnotationsAsMap) {
 
-        Adapt[] adaptations = Adapt.values(classValueAsString, nestedAnnotationsAsMap);
+        Adapt[] adaptations = Adapt.values(classValuesAsString, nestedAnnotationsAsMap);
         return getAnnotations(element).stream(annotationName)
                 .filter(MergedAnnotationPredicates.unique(MergedAnnotation::getMetaTypes))
                 .map(MergedAnnotation::withNonMergedAttributes)
@@ -526,11 +526,11 @@ public abstract class AnnotatedElementUtils {
      * @see #getMergedAnnotationAttributes(AnnotatedElement, String, boolean, boolean)
      */
     @Nullable
-    public static AnnotationAttributes findMergedAnnotationAttributes(AnnotatedElement element, Class<? extends Annotation> annotationType, boolean classValueAsString, boolean nestedAnnotationAsMap) {
+    public static AnnotationAttributes findMergedAnnotationAttributes(AnnotatedElement element, Class<? extends Annotation> annotationType, boolean classValuesAsString, boolean nestedAnnotationsAsMap) {
 
         MergedAnnotation<? extends Annotation> mergedAnnotation = findAnnotations(element)
                 .get(annotationType, null, MergedAnnotationSelectors.firstDirectlyDeclared());
-        return getAnnotationAttributes(mergedAnnotation, classValueAsString, nestedAnnotationAsMap);
+        return getAnnotationAttributes(mergedAnnotation, classValuesAsString, nestedAnnotationsAsMap);
     }
 
     /**
@@ -562,11 +562,11 @@ public abstract class AnnotatedElementUtils {
      */
     @Nullable
     public static AnnotationAttributes findMergedAnnotationAttributes(AnnotatedElement element,
-            String annotationName, boolean classValueAsString, boolean nestedAnnotationsAsMap) {
+            String annotationName, boolean classValuesAsString, boolean nestedAnnotationsAsMap) {
 
         MergedAnnotation<Annotation> mergedAnnotation = findAnnotations(element)
                 .get(annotationName, null, MergedAnnotationSelectors.firstDirectlyDeclared());
-        return getAnnotationAttributes(mergedAnnotation, classValueAsString, nestedAnnotationsAsMap);
+        return getAnnotationAttributes(mergedAnnotation, classValuesAsString, nestedAnnotationsAsMap);
     }
 
     /**

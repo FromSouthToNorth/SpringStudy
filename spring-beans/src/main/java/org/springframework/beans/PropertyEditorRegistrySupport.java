@@ -61,6 +61,12 @@ public class PropertyEditorRegistrySupport implements PropertyEditorRegistry {
     @Nullable
     private Map<Class<?>, PropertyEditor> customEditors;
 
+    @Nullable
+    private Map<String, CustomEditorHolder> customEditorsForPath;
+
+    @Nullable
+    private Map<Class<?>, PropertyEditor> customEditorCache;
+
     /**
      * Specify a Spring 3.0 ConversionService to use for converting
      * property values, as an alternative to JavaBeans PropertyEditors.
@@ -217,6 +223,252 @@ public class PropertyEditorRegistrySupport implements PropertyEditorRegistry {
         }
     }
 
+    /**
+     * Copy the default editors registered in this instance to the given target registry.
+     * @param target the target registry to copy to
+     */
+    protected void copyDefaultEditorsTo(PropertyEditorRegistrySupport target) {
+        target.defaultEditorsActive = this.defaultEditorsActive;
+        target.configValueEditorsActive = this.configValueEditorsActive;
+        target.defaultEditors = this.defaultEditors;
+        target.overriddenDefaultEditors = this.overriddenDefaultEditors;
+    }
+
+    //---------------------------------------------------------------------
+    // Management of custom editors 自定义编辑器的管理
+    //---------------------------------------------------------------------
+
+
+    @Override
+    public void registerCustomEditor(Class<?> requiredType, PropertyEditor propertyEditor) {
+        registerCustomEditor(requiredType, null, propertyEditor);
+    }
+
+    @Override
+    public void registerCustomEditor(@Nullable Class<?> requiredType, @Nullable String propertyPath, PropertyEditor propertyEditor) {
+        if (requiredType == null && propertyPath == null) {
+            throw new IllegalArgumentException("Either requiredType or propertyPath is required");
+        }
+        if (propertyPath != null) {
+            if (this.customEditorsForPath == null) {
+                this.customEditorsForPath = new LinkedHashMap<>(16);
+            }
+            this.customEditorsForPath.put(propertyPath, new CustomEditorHolder(propertyEditor, requiredType));
+        }
+        else {
+            if (this.customEditors == null) {
+                this.customEditors = new LinkedHashMap<>(16);
+            }
+            this.customEditors.put(requiredType, propertyEditor);
+            this.customEditorCache = null;
+        }
+    }
+
+    @Nullable
+    @Override
+    public PropertyEditor findCustomEditor(@Nullable Class<?> requiredType, @Nullable String propertyPath) {
+        Class<?> requiredTypeToUse = requiredType;
+        if (propertyPath != null) {
+            if (this.customEditorsForPath != null) {
+                // Check property-specific editor first.
+                PropertyEditor editor = getCustomEditor(propertyPath, requiredType);
+                if (editor == null) {
+                    List<String> strippedPaths = new ArrayList<>();
+                    addStrippedPropertyPaths(strippedPaths, "", propertyPath);
+                    for(Iterator<String> it = strippedPaths.iterator(); it.hasNext() && editor == null;) {
+                        String strippedPath = it.next();
+                        editor = getCustomEditor(strippedPath, requiredType);
+                    }
+                }
+                if (editor != null) {
+                    return editor;
+                }
+            }
+            if (requiredType == null) {
+                requiredTypeToUse = getPropertyType(propertyPath);
+            }
+        }
+        // No property-specific editor -> check type-specific editor.
+        return getCustomEditor(requiredTypeToUse);
+    }
+
+    /**
+     * Determine whether this registry contains a custom editor
+     * for the specified array/collection element.
+     * @param elementType the target type of the element
+     * (can be {@code null} if not known)
+     * @param propertyPath the property path (typically of the array/collection;
+     * can be {@code null} if not known)
+     * @return whether a matching custom editor has been found
+     */
+    public boolean hasCustomEditorForElement(@Nullable Class<?> elementType, @Nullable String propertyPath) {
+        if (propertyPath != null && this.customEditorsForPath != null) {
+            for (Map.Entry<String, CustomEditorHolder> entry : this.customEditorsForPath.entrySet()) {
+                if (PropertyAccessorUtils.matchesProperty(entry.getKey(), propertyPath) &&
+                        entry.getValue().getPropertyEditor(elementType) != null) {
+                    return true;
+                }
+            }
+        }
+        // No property-specific editor -> check type-specific editor,
+        return (elementType != null && this.customEditors != null && this.customEditors.containsKey(elementType));
+    }
+
+    /**
+     * Determine the property type for the given property path.
+     * <p>Called by {@link #findCustomEditor} if no required type has been specified,
+     * to be able to find a type-specific editor even if just given a property path.
+     * <p>The default implementation always returns {@code null}.
+     * BeanWrapperImpl overrides this with the standard {@code getPropertyType}
+     * method as defined by the BeanWrapper interface.
+     * @param propertyPath the property path to determine the type for
+     * @return the type of the property, or {@code null} if not determinable
+     * @see BeanWrapper#getPropertyType(String)
+     */
+    @Nullable
+    protected Class<?> getPropertyType(String propertyPath) {
+        return null;
+    }
+
+    /**
+     * Get custom editor that has been registered for the given property.
+     * @param propertyName the property path to look for
+     * @param requiredType the type to look for
+     * @return the custom editor, or {@code null} if none specific for this property
+     */
+    @Nullable
+    private PropertyEditor getCustomEditor(String propertyName, @Nullable Class<?> requiredType) {
+        CustomEditorHolder holder =
+                (this.customEditorsForPath != null ? this.customEditorsForPath.get(propertyName) : null);
+        return (holder != null ? holder.getPropertyEditor(requiredType) : null);
+    }
+
+    /**
+     * Get custom editor for the given type. If no direct match found,
+     * try custom editor for superclass (which will in any case be able
+     * to render a value as String via {@code getAsText}).
+     * @param requiredType the type to look for
+     * @return the custom editor, or {@code null} if none found for this type
+     * @see java.beans.PropertyEditor#getAsText()
+     */
+    @Nullable
+    private PropertyEditor getCustomEditor(@Nullable Class<?> requiredType) {
+        if (requiredType == null || this.customEditors == null) {
+            return null;
+        }
+        // Check directly registered editor for type.
+        PropertyEditor editor = this.customEditors.get(requiredType);
+        if (editor == null) {
+            // Check editor for superclass or interface.
+            if (this.customEditorCache != null) {
+                editor = this.customEditorCache.get(requiredType);
+            }
+            if (editor == null) {
+                // Find editor for superclass or interface.
+                for (Iterator<Class<?>> it = this.customEditors.keySet().iterator(); it.hasNext() && editor == null;) {
+                    Class<?> key = it.next();
+                    editor = this.customEditors.get(key);
+                    // Cache editor for search type, to avoid the overhead
+                    // of repeated assignable-form checks.
+                    if (this.customEditorCache == null) {
+                        this.customEditorCache = new HashMap<>();
+                    }
+                    this.customEditorCache.put(requiredType, editor);
+                }
+            }
+        }
+        return editor;
+    }
+
+    /**
+     * Guess the property type of the specified property from the registered
+     * custom editors (provided that they were registered for a specific type).
+     * @param propertyName the name of the property
+     * @return the property type, or {@code null} if not determinable
+     */
+    @Nullable
+    protected Class<?> guessPropertyTypeFromEditors(String propertyName) {
+        if (this.customEditorsForPath != null) {
+            CustomEditorHolder editorHolder = this.customEditorsForPath.get(propertyName);
+            if (editorHolder == null) {
+                List<String> strippedPaths = new ArrayList<>();
+                addStrippedPropertyPaths(strippedPaths, "", propertyName);
+                for (Iterator<String> it = strippedPaths.iterator(); it.hasNext() && editorHolder == null;) {
+                    String strippedName = it.next();
+                    editorHolder = this.customEditorsForPath.get(strippedName);
+                }
+            }
+            if (editorHolder != null) {
+                return editorHolder.getRegisteredType();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Copy the custom editors registered in this instance to the given target registry.
+     * @param target the target registry to copy to
+     * @param nestedProperty the nested property path of the target registry, if any.
+     * If this is non-null, only editors registered for a path below this nested property
+     * will be copied. If this is null, all editors will be copied.
+     */
+    protected void copyCustomEditorsTo(PropertyEditorRegistry target, @Nullable String nestedProperty) {
+        String actualPropertyName =
+                (nestedProperty != null ? PropertyAccessorUtils.getPropertyName(nestedProperty) : null);
+        if (this.customEditors != null) {
+            this.customEditors.forEach(target::registerCustomEditor);
+        }
+        if (this.customEditorsForPath != null) {
+            this.customEditorsForPath.forEach((editorPath, editorHolder) -> {
+                if (nestedProperty != null) {
+                    int pos =PropertyAccessorUtils.getFirstNestedPropertySeparatorIndex(editorPath);
+                    if (pos != -1) {
+                        String editorNestedProperty = editorPath.substring(0, pos);
+                        String editorNestedPath = editorPath.substring(pos + 1);
+                        if (editorNestedProperty.equals(nestedProperty) || editorNestedProperty.equals(actualPropertyName)) {
+                            target.registerCustomEditor(
+                                    editorHolder.getRegisteredType(), editorNestedPath, editorHolder.getPropertyEditor());
+                        }
+                    }
+                }
+                else {
+                    target.registerCustomEditor(
+                            editorHolder.getRegisteredType(), editorPath, editorHolder.getPropertyEditor());
+                }
+            });
+        }
+    }
+
+    /**
+     * Add property paths with all variations of stripped keys and/or indexes.
+     * Invokes itself recursively with nested paths.
+     * @param strippedPaths the result list to add to
+     * @param nestedPath the current nested path
+     * @param propertyPath the property path to check for keys/indexes to strip
+     */
+    private void addStrippedPropertyPaths(List<String> strippedPaths, String nestedPath, String propertyPath) {
+        int startIndex = propertyPath.indexOf(PropertyAccessor.PROPERTY_KEY_SUFFIX_CHAR);
+        if (startIndex != -1) {
+            int endIndex = propertyPath.indexOf(PropertyAccessor.PROPERTY_KEY_SUFFIX_CHAR);
+            if (endIndex != -1) {
+                String prefix = propertyPath.substring(0, startIndex);
+                String key = propertyPath.substring(startIndex, endIndex + 1);
+                String suffix = propertyPath.substring(endIndex + 1);
+                // String the first key.
+                strippedPaths.add(nestedPath + prefix + suffix);
+                // Search for further keys to strip, with the first key stripped.
+                addStrippedPropertyPaths(strippedPaths, nestedPath + prefix, suffix);
+                // Search for further keys to strip, with the first key not stripped.
+                addStrippedPropertyPaths(strippedPaths, nestedPath + prefix + key, suffix);
+            }
+        }
+    }
+
+
+    /**
+     * Holder for a registered custom editor with property name.
+     * Keeps the PropertyEditor itself plus the type it was registered for.
+     */
     private static final class CustomEditorHolder {
 
         private final PropertyEditor propertyEditor;
@@ -258,7 +510,6 @@ public class PropertyEditorRegistrySupport implements PropertyEditorRegistry {
                 return null;
             }
         }
-
     }
 
 }

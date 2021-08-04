@@ -63,6 +63,12 @@ public abstract class AttributeAccessorSupport implements AttributeAccessor, Ser
     }
 
     @Override
+    public boolean hasAttribute(String name) {
+        Assert.notNull(name, "Name must not be null");
+        return this.attributes.containsKey(name);
+    }
+
+    @Override
     public String[] attributeNames() {
         return StringUtils.toStringArray(this.attributes.keySet());
     }

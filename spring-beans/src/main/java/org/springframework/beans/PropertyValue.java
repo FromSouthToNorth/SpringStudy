@@ -1,7 +1,5 @@
 package org.springframework.beans;
 
-import org.springframework.BeanMetadataAttributeAccessor;
-
 import java.io.Serializable;
 
 /**

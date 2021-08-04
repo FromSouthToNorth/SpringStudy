@@ -47,6 +47,17 @@ class TypeConverterDelegate {
         this.targetObject = targetObject;
     }
 
+    /**
+     * Convert the value to the required type for the specified property.
+     * @param propertyName name of the property
+     * @param oldValue the previous value, if available (may be {@code null})
+     * @param newValue the proposed new value
+     * @param requiredType the type we must convert to
+     * (or {@code null} if not known, for example in case of a collection element)
+     * @return the new value, possibly the result of type conversion
+     * @throws IllegalArgumentException if type conversion failed
+     */
+    @Nullable
     public <T> T convertIfNecessary(@Nullable String propertyName, @Nullable Object oldValue,
             Object newValue, @Nullable Class<T> requiredType) throws IllegalArgumentException {
 

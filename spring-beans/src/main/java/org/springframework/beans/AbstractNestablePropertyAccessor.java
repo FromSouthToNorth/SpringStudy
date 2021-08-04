@@ -61,6 +61,6 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 //        if (registerDefaultEditors) {
 //            registerDefaultEditors();
 //        }
-//        this.ty
+//        this.type
     }
 }
